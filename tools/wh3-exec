@@ -1,0 +1,64 @@
+#!/bin/bash
+# wh3-exec: push a Lua snippet into a RUNNING Total War: Warhammer 3 campaign
+# and wait for the result. The in-game mod (wh3_mcp.pack) executes it live via
+# its exec bridge — no restart, no UI interaction.
+#
+# Requirements:
+#   - The game is running with wh3_mcp.pack enabled (campaign loaded)
+#   - An SSH alias exists for the Windows machine (edit VM_SSH_ALIAS below)
+#   - The mod's OUTPUT_DIR exists on the PC (default C:\wh3-mcp-data)
+#
+# Usage:
+#   wh3-exec 'cm:grant_money("wh3_main_ksl_the_ice_court", 10000)'
+#   wh3-exec -f /path/to/script.lua
+#
+# Result: prints exec_result.json {ok, error, output, result, timestamp}
+set -e
+
+VM_SSH_ALIAS="${WH3_VM:-wh3-pc}"            # ~/.ssh/config Host entry
+EXEC_DIR='C:/wh3-mcp-data/exec'             # must match mod OUTPUT_DIR
+SSH_KEY="${WH3_SSH_KEY:-}"                  # optional: -i flag if not in ssh config
+
+LOCAL_DIR="${TMPDIR:-/tmp}/wh3-exec"
+mkdir -p "$LOCAL_DIR"
+TRIGGER="$LOCAL_DIR/trigger.txt"
+SCRIPT="$LOCAL_DIR/exec_script.lua"
+RESULT="$LOCAL_DIR/exec_result.json"
+
+if [ "$1" = "-f" ]; then
+  cp "$2" "$SCRIPT"
+else
+  printf '%s' "$1" > "$SCRIPT"
+fi
+
+TS=$(date +%s)
+LAST=$(cat "$TRIGGER" 2>/dev/null || echo 0)
+NEXT=$(( LAST > TS ? LAST + 1 : TS ))
+printf '%s' "$NEXT" > "$TRIGGER"
+
+ssh_extra=()
+[ -n "$SSH_KEY" ] && ssh_extra=(-i "$SSH_KEY")
+
+echo "Pushing exec_script.lua ($(wc -c < "$SCRIPT") bytes, trigger $NEXT)..."
+scp "${ssh_extra[@]}" -o BatchMode=yes "$SCRIPT" "$TRIGGER" "$VM_SSH_ALIAS:$EXEC_DIR/" >/dev/null
+
+echo "Waiting for in-game execution (up to 45s)..."
+for i in $(seq 1 45); do
+  sleep 1
+  if scp "${ssh_extra[@]}" -o BatchMode=yes "$VM_SSH_ALIAS:$EXEC_DIR/exec_result.json" "$RESULT" >/dev/null 2>&1; then
+    if [ -s "$RESULT" ]; then
+      echo "=== exec_result.json:"
+      python3 -c "
+import json
+d = json.load(open('$RESULT'))
+print('ok:', d.get('ok'))
+if d.get('error'): print('error:', d.get('error'))
+if d.get('output'): print('output:'); print(d['output'])
+if d.get('result') is not None: print('result:', d['result'])
+"
+      exit 0
+    fi
+  fi
+done
+echo "TIMED OUT — is the campaign running with wh3_mcp.pack enabled?"
+exit 1
