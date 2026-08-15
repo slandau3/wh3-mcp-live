@@ -57,7 +57,10 @@ fi
 
 # Monotonic trigger: seed from the remote watermark (also handles multi-client)
 REMOTE_WM=$(ssh "${ssh_extra[@]}" "$VM_SSH_ALIAS" "type $EXEC_DIR\\$TRIGGER_REMOTE 2>nul || echo 0" 2>/dev/null | tr -d '\r' | tail -1)
-REMOTE_WM=$(( ${REMOTE_WM:-0} + 0 ))
+case "$REMOTE_WM" in
+  ''|*[!0-9]*) REMOTE_WM=0 ;;
+esac
+REMOTE_WM=$(( REMOTE_WM + 0 ))
 NOW=$(date +%s)
 NEXT=$(( REMOTE_WM > NOW ? REMOTE_WM + 1 : NOW ))
 printf '%s' "$NEXT" > "$TRIGGER"
@@ -84,14 +87,15 @@ except Exception:
     if [ "$REQ" = "$NEXT" ]; then
       echo "=== $RESULT_REMOTE:"
       python3 -c "
-import json
+import json, sys
 d = json.load(open('$RESULT'))
 print('ok:', d.get('ok'))
 if d.get('error'): print('error:', d.get('error'))
 if d.get('output'): print('output:'); print(d['output'])
 if d.get('result') is not None: print('result:', d['result'])
+sys.exit(0 if d.get('ok') else 2)
 "
-      exit 0
+      exit $?
     fi
   fi
   sleep 1

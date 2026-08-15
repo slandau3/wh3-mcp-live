@@ -399,10 +399,10 @@ local function flush_events()
         existing = {}
     end
 
+    local pending = {}
     for _, entry in ipairs(event_buffer) do
-        table.insert(existing, { line = json.encode(entry), turn = entry.turn or 0 })
+        table.insert(pending, { line = json.encode(entry), turn = entry.turn or 0 })
     end
-    event_buffer = {}
 
     local turns = {}
     for _, e in ipairs(existing) do turns[e.turn] = true end
@@ -419,10 +419,15 @@ local function flush_events()
     end
     local out_file = io.open(EVENTS_STATE_PATH, "w")
     if out_file then
+        local write_ok = true
         for _, line in ipairs(filtered) do
-            out_file:write(line .. "\n")
+            if not out_file:write(line .. "\n") then write_ok = false break end
         end
         out_file:close()
+        if write_ok then
+            -- only drop the in-memory buffer once persisted
+            event_buffer = {}
+        end
     end
 end
 
@@ -577,8 +582,10 @@ local function check_trigger()
         if trigger_time > last_trigger_time then
             last_trigger_time = trigger_time
             dump_game_state()
+            return true
         end
     end
+    return false
 end
 
 -- ============================================================
@@ -622,6 +629,7 @@ local function run_exec_script()
             ok = false,
             error = "exec_script.lua not found",
             output = "",
+            request = last_exec_trigger_time,
             timestamp = os.time(),
         }
         write_file(EXEC_RESULT_PATH, json.encode(res))
@@ -707,8 +715,10 @@ cm:add_first_tick_callback(function()
     cm:repeat_real_callback(
         function()
             pcall(function()
-                check_trigger()
-                dump_game_state()
+                local triggered = check_trigger()
+                if not triggered then
+                    dump_game_state()
+                end
             end)
         end,
         DUMP_INTERVAL * 1000,

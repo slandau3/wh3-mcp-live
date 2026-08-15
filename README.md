@@ -81,10 +81,11 @@ tools/wh3-exec 'cm:grant_money("wh3_main_ksl_the_ice_court", 10000)'
 tools/wh3-exec -f /path/to/script.lua
 ```
 
-Prints `exec_result.json`:
+Prints a summary of `exec_result.json` (raw file has `ok`, `error`, `output`,
+`result`, `request`, `timestamp`; exits non-zero when `ok` is false):
 ```json
 {"ok": true, "error": "", "output": "gold granted",
- "result": {"ok": true}, "timestamp": 1786766759}
+ "result": {"ok": true}, "request": 1786766759, "timestamp": 1786766759}
 ```
 
 In the exec'd script you get:
@@ -123,7 +124,7 @@ Optional second pack (`wh3_mod_battle/`) adds the same exec bridge to the
 
 - Builds to a separate pack; enable/disable independently of the campaign mod.
 - Overrides `script/battle/default_battle/battle_start.lua` — thin mirror of
-  the vanilla setup + the bridge polled via `bm:callback`. This is the
+  the vanilla setup + the bridge polled via `bm:repeat_real_callback`. This is the
   patch-sensitive part; disable the pack if anything misbehaves.
 - Uses `exec_battle_script.lua` / `exec_battle_trigger.txt` /
   `exec_battle_result.json` in the same exec folder. Agent side:

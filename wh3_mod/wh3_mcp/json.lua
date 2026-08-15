@@ -11,14 +11,20 @@ function json.encode(val)
     elseif t == "boolean" then
         return val and "true" or "false"
     elseif t == "number" then
+        if val ~= val or val == math.huge or val == -math.huge then
+            return "null"
+        end
         return tostring(val)
     elseif t == "string" then
         local escaped = val
-        escaped = escaped:gsub('\\', '\\\\')
-        escaped = escaped:gsub('"', '\\"')
-        escaped = escaped:gsub('\n', '\\n')
-        escaped = escaped:gsub('\r', '\\r')
-        escaped = escaped:gsub('\t', '\\t')
+        escaped = escaped:gsub('[%z\1-\31"\\\\]', function(c)
+            if c == '"' then return '\\"' end
+            if c == "\\" then return "\\\\" end
+            if c == "\n" then return "\\n" end
+            if c == "\r" then return "\\r" end
+            if c == "\t" then return "\\t" end
+            return string.format("\\u%04x", string.byte(c))
+        end)
         return '"' .. escaped .. '"'
     elseif t == "table" then
         local is_array = false

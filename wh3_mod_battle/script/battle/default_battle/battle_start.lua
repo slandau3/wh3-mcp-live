@@ -66,13 +66,17 @@ local function json_encode(v)
     elseif type(v) == "table" then
         local is_array = true
         local n = 0
+        local max_index = 0
         for k in pairs(v) do
             n = n + 1
             if type(k) ~= "number" or k < 1 or k ~= math.floor(k) then
                 is_array = false
+            elseif k > max_index then
+                max_index = k
             end
         end
-        if is_array then
+        if is_array and max_index == n then
+            -- dense 1..n array only; holes and sparse tables fall through
             local parts = {}
             for i = 1, n do
                 parts[i] = json_encode(v[i])
@@ -81,7 +85,9 @@ local function json_encode(v)
         end
         local parts = {}
         for k, val in pairs(v) do
-            table.insert(parts, json_encode(k) .. ":" .. json_encode(val))
+            if type(k) == "string" then
+                table.insert(parts, json_encode(k) .. ":" .. json_encode(val))
+            end
         end
         return "{" .. table.concat(parts, ",") .. "}"
     end

@@ -25,7 +25,8 @@ cm = {
     end,
 }
 core = { add_listener = function() end }
-loadstring = load
+local compile = loadstring or load
+loadstring = compile
 
 local json = dofile("wh3_mod/wh3_mcp/json.lua")
 local function dump_game_state() end
@@ -103,6 +104,7 @@ os.remove(TMP .. "/exec/exec_script.lua")
 result = exec_request(4, "", true)
 print("TEST4:", result)
 expect(result and result:find("not found") ~= nil, "missing script handled", result)
+expect(result and result:find('"request":4') ~= nil, "missing-script carries request", result)
 
 -- TEST 5: stale trigger ignored (monotonicity)
 os.remove(TMP .. "/exec/exec_result.json")

@@ -37,7 +37,9 @@ running Total War: Warhammer 3 game, driven by AI agents. See README.md.
 lua -e "assert(loadfile('wh3_mod/wh3_mcp_dump.lua'))"            # campaign mod
 lua -e "assert(loadfile('wh3_mod_battle/script/battle/default_battle/battle_start.lua'))"
 lua test/exec_bridge_test.lua                                     # exec bridge logic tests
-python3 tools/make_pack.py wh3_mod build/wh3_mcp.pack            # pack build (see README)
+rm -rf build && mkdir -p build/mod/script/campaign/mod
+cp -R wh3_mod/wh3_mcp build/mod/script/campaign/mod/ && cp wh3_mod/wh3_mcp_dump.lua build/mod/script/campaign/mod/
+python3 tools/make_pack.py build/mod build/wh3_mcp.pack            # campaign pack
 python3 tools/make_pack.py wh3_mod_battle build/wh3_battle.pack
 bash -n tools/wh3-exec
 ```
