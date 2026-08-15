@@ -98,9 +98,19 @@ Anything the campaign scripting API allows, called live:
 mutate faction state, run probes, then return structured data. The state dumps
 refresh immediately after each execution so the agent can verify effects.
 
-## Upstream
+## Upstream & prior art
 
-Forked from [007lock/wh3-mcp](https://github.com/007lock/wh3-mcp) — campaign
-state dumper + MCP server. This repo adds the exec bridge, the agent loop tool,
-and the pack builder. MIT licensed (see LICENSE); upstream contributions remain
-under their own terms.
+- Forked from [007lock/wh3-mcp](https://github.com/007lock/wh3-mcp) — campaign
+  state dumper + MCP server. This repo adds the exec bridge, the agent loop
+  tool, and the pack builder.
+- In-game external-Lua execution was pioneered by the community dev-tool mods:
+  - **Execute External Lua File (Modding Tool)** — WH2 `1916572654`, WH3
+    `2791573994` (runs `exec.lua` from the game folder on an in-game hotkey)
+  - **Modding Devtool Console** (mklabs) — desktop REPL with execute-on-save
+  - **Modding Development Tools: Lua Console** (Groove Wizard) — in-game UI
+    console
+- Our delta over those: the execution is **trigger-file driven (no hotkey or
+  human input)**, results come back as **machine-readable JSON** for agents,
+  and it's wired into an **MCP server + remote agent loop**.
+
+MIT licensed (see LICENSE); upstream contributions remain under their own terms.
