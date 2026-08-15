@@ -11,14 +11,19 @@ Usage: make_pack.py [MOD_DIR] [OUT_PACK]
 import os
 import struct
 import sys
+import tempfile
 import time
 
 
 def collect_files(root):
+    if not os.path.isdir(root):
+        raise SystemExit(f"MOD_DIR not found: {root}")
     files = []
     for dirpath, _, filenames in os.walk(root):
         for fn in filenames:
             full = os.path.join(dirpath, fn)
+            if os.path.islink(full):
+                raise SystemExit(f"Refusing symlink: {full}")
             rel = os.path.relpath(full, root).replace("/", "\\")
             with open(full, "rb") as f:
                 data = f.read()
@@ -31,6 +36,8 @@ def main():
     out_pack = sys.argv[2] if len(sys.argv) > 2 else "wh3_mcp.pack"
 
     files = collect_files(mod_dir)
+    if not files:
+        raise SystemExit(f"no files found under {mod_dir} — refusing empty pack")
     files.sort(key=lambda x: x[0].lower())
 
     index_entries = []
@@ -48,12 +55,17 @@ def main():
     header += struct.pack("<I", sum(len(e) for e in index_entries))
     header += struct.pack("<I", int(time.time()))
 
-    with open(out_pack, "wb") as f:
+    # Atomic write: temp file in same dir, then replace
+    tmp_path = out_pack + ".tmp"
+    with open(tmp_path, "wb") as f:
         f.write(header)
         for e in index_entries:
             f.write(e)
         for _, data in files:
             f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, out_pack)
 
     print(f"Wrote {out_pack}: {len(files)} files, {os.path.getsize(out_pack)} bytes")
     for path, data in files:

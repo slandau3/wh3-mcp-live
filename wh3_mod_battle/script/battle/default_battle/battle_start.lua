@@ -41,16 +41,44 @@ local function write_file(path, data)
 end
 
 -- Minimal JSON encoder (avoids module-path coupling in battle context)
+local function json_escape(s)
+    s = s:gsub('[%z\1-\31"\\]', function(c)
+        if c == '"' then return '\\"' end
+        if c == "\\" then return "\\\\" end
+        if c == "\n" then return "\\n" end
+        if c == "\r" then return "\\r" end
+        if c == "\t" then return "\\t" end
+        return string.format("\\u%04x", string.byte(c))
+    end)
+    return s
+end
+
 local function json_encode(v)
     if type(v) == "string" then
-        return '"' .. v:gsub('["\\]', function(c) return "\\" .. c end) .. '"'
+        return '"' .. json_escape(v) .. '"'
     elseif type(v) == "number" then
+        if v ~= v or v == math.huge or v == -math.huge then return "null" end
         return tostring(v)
     elseif type(v) == "boolean" then
         return tostring(v)
     elseif type(v) == "nil" then
         return "null"
     elseif type(v) == "table" then
+        local is_array = true
+        local n = 0
+        for k in pairs(v) do
+            n = n + 1
+            if type(k) ~= "number" or k < 1 or k ~= math.floor(k) then
+                is_array = false
+            end
+        end
+        if is_array then
+            local parts = {}
+            for i = 1, n do
+                parts[i] = json_encode(v[i])
+            end
+            return "[" .. table.concat(parts, ",") .. "]"
+        end
         local parts = {}
         for k, val in pairs(v) do
             table.insert(parts, json_encode(k) .. ":" .. json_encode(val))
@@ -86,20 +114,21 @@ local function run_battle_exec()
 
     out = original_out
 
-    local result_json = nil
-    if _G.wh3_battle_exec_result ~= nil then
-        local r_ok, encoded = pcall(json_encode, _G.wh3_battle_exec_result)
-        if r_ok then result_json = encoded end
-    end
-
     local res = {
         ok = run_ok,
         error = run_ok and "" or tostring(run_err),
         output = table.concat(battle_output_buffer, "\n"),
-        result = result_json,
+        result = _G.wh3_battle_exec_result,
+        request = last_trigger_time,
         timestamp = os.time(),
     }
-    write_file(EXEC_RESULT_PATH, json_encode(res))
+    local enc_ok, encoded = pcall(json_encode, res)
+    if enc_ok then
+        write_file(EXEC_RESULT_PATH, encoded)
+    else
+        res.result = tostring(_G.wh3_battle_exec_result)
+        write_file(EXEC_RESULT_PATH, json_encode(res))
+    end
     out("WH3 BATTLE EXEC: ran, ok=" .. tostring(run_ok))
 end
 
@@ -116,13 +145,24 @@ local function check_battle_exec_trigger()
     end
 end
 
--- Start polling with the battle manager's real-time callback (per-battle
--- context: re-registers automatically on every new battle).
-bm:callback(
+-- Seed watermark so a stale trigger never replays on battle start
+local function seed_battle_watermark()
+    local f = io.open(EXEC_TRIGGER_PATH, "r")
+    if f then
+        last_trigger_time = tonumber(f:read("*a")) or 0
+        f:close()
+    end
+end
+seed_battle_watermark()
+
+-- Repeating real-time poll (per-battle context; re-registers each battle).
+-- bm:callback is single-shot; repeat_real_callback repeats with ms intervals.
+bm:repeat_real_callback(
     function()
         pcall(check_battle_exec_trigger)
     end,
-    POLL_INTERVAL
+    POLL_INTERVAL * 1000,
+    "wh3_battle_exec_poll"
 )
 
 out("WH3 BATTLE EXEC: bridge active (poll " .. POLL_INTERVAL .. "s)")

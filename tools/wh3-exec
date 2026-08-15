@@ -1,7 +1,7 @@
 #!/bin/bash
 # wh3-exec: push a Lua snippet into a RUNNING Total War: Warhammer 3 campaign
-# and wait for the result. The in-game mod (wh3_mcp.pack) executes it live via
-# its exec bridge — no restart, no UI interaction.
+# (or battle with -b) and wait for the result. The in-game mod executes it live
+# via its exec bridge — no restart, no UI interaction.
 #
 # Requirements:
 #   - The game is running with wh3_mcp.pack enabled (campaign loaded)
@@ -10,38 +10,44 @@
 #
 # Usage:
 #   wh3-exec 'cm:grant_money("wh3_main_ksl_the_ice_court", 10000)'
+#   wh3-exec -b 'bm:... your battle lua ...'
 #   wh3-exec -f /path/to/script.lua
 #
-# Result: prints exec_result.json {ok, error, output, result, timestamp}
+# Result: prints exec_result.json {ok, error, output, result, request, timestamp}
 set -e
 
 VM_SSH_ALIAS="${WH3_VM:-wh3-pc}"            # ~/.ssh/config Host entry
 EXEC_DIR='C:/wh3-mcp-data/exec'             # must match mod OUTPUT_DIR
-SSH_KEY="${WH3_SSH_KEY:-}"                  # optional: -i flag if not in ssh config
+SSH_KEY="${WH3_SSH_KEY:-}"                  # optional -i flag if not in ssh config
+DEADLINE="${WH3_EXEC_TIMEOUT:-45}"          # seconds to wait for in-game result
 
-LOCAL_DIR="${TMPDIR:-/tmp}/wh3-exec"
-mkdir -p "$LOCAL_DIR"
-TRIGGER="$LOCAL_DIR/trigger.txt"
-SCRIPT="$LOCAL_DIR/exec_script.lua"
-RESULT="$LOCAL_DIR/exec_result.json"
+ssh_extra=(-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=5)
+[ -n "$SSH_KEY" ] && ssh_extra+=(-i "$SSH_KEY")
 
-# Battle mode (-b): execute in the battle context instead of the campaign
+# Private per-invocation working dir (no symlink/stale-file attacks)
+WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/wh3-exec.XXXXXX")
+trap 'rm -rf "$WORKDIR"' EXIT
+
+BATTLE=0
 if [ "$1" = "-b" ]; then
   BATTLE=1
   shift
 fi
+
 if [ "$BATTLE" = "1" ]; then
-  SCRIPT="$LOCAL_DIR/exec_battle_script.lua"
-  TRIGGER="$LOCAL_DIR/battle_trigger.txt"
-  RESULT="$LOCAL_DIR/battle_result.json"
   SCRIPT_REMOTE='exec_battle_script.lua'
   TRIGGER_REMOTE='exec_battle_trigger.txt'
   RESULT_REMOTE='exec_battle_result.json'
+  echo "battle mode"
 else
   SCRIPT_REMOTE='exec_script.lua'
   TRIGGER_REMOTE='exec_trigger.txt'
   RESULT_REMOTE='exec_result.json'
 fi
+
+SCRIPT="$WORKDIR/$SCRIPT_REMOTE"
+TRIGGER="$WORKDIR/$TRIGGER_REMOTE"
+RESULT="$WORKDIR/$RESULT_REMOTE"
 
 if [ "$1" = "-f" ]; then
   cp "$2" "$SCRIPT"
@@ -49,23 +55,34 @@ else
   printf '%s' "$1" > "$SCRIPT"
 fi
 
-TS=$(date +%s)
-LAST=$(cat "$TRIGGER" 2>/dev/null || echo 0)
-NEXT=$(( LAST > TS ? LAST + 1 : TS ))
+# Monotonic trigger: seed from the remote watermark (also handles multi-client)
+REMOTE_WM=$(ssh "${ssh_extra[@]}" "$VM_SSH_ALIAS" "type $EXEC_DIR\\$TRIGGER_REMOTE 2>nul || echo 0" 2>/dev/null | tr -d '\r' | tail -1)
+REMOTE_WM=$(( ${REMOTE_WM:-0} + 0 ))
+NOW=$(date +%s)
+NEXT=$(( REMOTE_WM > NOW ? REMOTE_WM + 1 : NOW ))
 printf '%s' "$NEXT" > "$TRIGGER"
 
-ssh_extra=()
-[ -n "$SSH_KEY" ] && ssh_extra=(-i "$SSH_KEY")
+echo "Pushing $SCRIPT_REMOTE ($(wc -c < "$SCRIPT") bytes, request $NEXT)..."
+scp "${ssh_extra[@]}" "$SCRIPT" "$VM_SSH_ALIAS:$EXEC_DIR/$SCRIPT_REMOTE" >/dev/null
+scp "${ssh_extra[@]}" "$TRIGGER" "$VM_SSH_ALIAS:$EXEC_DIR/$TRIGGER_REMOTE" >/dev/null
 
-echo "Pushing $SCRIPT_REMOTE ($(wc -c < "$SCRIPT") bytes, trigger $NEXT)..."
-scp "${ssh_extra[@]}" -o BatchMode=yes "$SCRIPT" "$TRIGGER" "$VM_SSH_ALIAS:$EXEC_DIR/" >/dev/null
-
-echo "Waiting for in-game execution (up to 45s)..."
-for i in $(seq 1 45); do
-  sleep 1
-  if scp "${ssh_extra[@]}" -o BatchMode=yes "$VM_SSH_ALIAS:$EXEC_DIR/$RESULT_REMOTE" "$RESULT" >/dev/null 2>&1; then
-    if [ -s "$RESULT" ]; then
-      echo "=== exec_result.json:"
+echo "Waiting for in-game execution (up to ${DEADLINE}s)..."
+START=$(date +%s)
+while true; do
+  NOW=$(date +%s)
+  if [ $((NOW - START)) -ge "$DEADLINE" ]; then
+    echo "TIMED OUT — is the campaign running with wh3_mcp.pack enabled?"
+    exit 1
+  fi
+  if scp "${ssh_extra[@]}" "$VM_SSH_ALIAS:$EXEC_DIR/$RESULT_REMOTE" "$RESULT" >/dev/null 2>&1 && [ -s "$RESULT" ]; then
+    REQ=$(python3 -c "import json,sys
+try:
+    d=json.load(open('$RESULT'))
+    print(d.get('request'))
+except Exception:
+    print('')" 2>/dev/null)
+    if [ "$REQ" = "$NEXT" ]; then
+      echo "=== $RESULT_REMOTE:"
       python3 -c "
 import json
 d = json.load(open('$RESULT'))
@@ -77,6 +94,5 @@ if d.get('result') is not None: print('result:', d['result'])
       exit 0
     fi
   fi
+  sleep 1
 done
-echo "TIMED OUT — is the campaign running with wh3_mcp.pack enabled?"
-exit 1

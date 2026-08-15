@@ -137,4 +137,4 @@ tools/wh3-exec -b 'bm:... your battle lua ...'
 - Battle state is throwaway — mid-battle changes do not persist to campaign
   or saves. Singleplayer only.
 
-Build: `python3 tools/make_pack.py wh3_mod_battle/script wh3_battle.pack`
+Build: `python3 tools/make_pack.py wh3_mod_battle wh3_battle.pack` (pack root must be `wh3_mod_battle` so the `script\battle\...` prefix is preserved)

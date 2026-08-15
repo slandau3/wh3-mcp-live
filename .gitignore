@@ -1,0 +1,3 @@
+tools/*.local
+private/
+*.tmp

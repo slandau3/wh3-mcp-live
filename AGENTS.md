@@ -8,8 +8,9 @@ running Total War: Warhammer 3 game, driven by AI agents. See README.md.
 ## Agent loop (OpenCode ↔ Kimi-K)
 
 - **OpenCode** implements and self-verifies: Lua syntax check (`lua -e
-  "assert(loadfile(...))"`), the exec-bridge logic test harness (see
-  `docs/testing.md`), pack build + personal-info sweep before any commit.
+  "assert(loadfile(...))"`), the exec-bridge logic test harness
+  (`test/exec_bridge_test.lua`), pack build + personal-info sweep before any
+  commit.
 - **Kimi-K3** reviews locally (the review tool lives outside this repo — not
   published): hand it the review checklist below or run the local helper. It
   requires Kimi quota; it 403s when exhausted — just retry later.
@@ -23,8 +24,8 @@ running Total War: Warhammer 3 game, driven by AI agents. See README.md.
 1. Never commit without the Lua syntax check + pack build passing.
 2. Every new Lua that runs in-game must be pcall-wrapped and trigger-driven
    (no hotkeys, no human input).
-3. Personal info stays out: no emails, machine names, IPs, or keys. Sweep
-   with `grep -rniE "stevenlandau|gmail|100\\.88\\.|shadow-54" .` before push.
+3. Personal info stays out: no emails, machine names, IPs, or keys. Run the
+   local sweep helper (kept OUT of the repo) before push.
 4. The battle-context override is patch-sensitive by design — label any change
    to `wh3_mod_battle/` as experimental in the commit.
 5. Game-engine constraints are not bugs: DB-table edits still require pack
@@ -35,6 +36,8 @@ running Total War: Warhammer 3 game, driven by AI agents. See README.md.
 ```bash
 lua -e "assert(loadfile('wh3_mod/wh3_mcp_dump.lua'))"            # campaign mod
 lua -e "assert(loadfile('wh3_mod_battle/script/battle/default_battle/battle_start.lua'))"
-python3 tools/make_pack.py wh3_mod/wh3_mcp_dump.lua 2>/dev/null  # (see README for layout)
+lua test/exec_bridge_test.lua                                     # exec bridge logic tests
+python3 tools/make_pack.py wh3_mod build/wh3_mcp.pack            # pack build (see README)
+python3 tools/make_pack.py wh3_mod_battle build/wh3_battle.pack
 bash -n tools/wh3-exec
 ```
