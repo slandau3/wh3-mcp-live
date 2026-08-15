@@ -10,8 +10,9 @@ running Total War: Warhammer 3 game, driven by AI agents. See README.md.
 - **OpenCode** implements and self-verifies: Lua syntax check (`lua -e
   "assert(loadfile(...))"`), the exec-bridge logic test harness (see
   `docs/testing.md`), pack build + personal-info sweep before any commit.
-- **Kimi-K** reviews: `tools/kimi-review.sh [security|correctness|compat|all]`
-  (requires Kimi-K quota; will 403 when exhausted — just retry later).
+- **Kimi-K3** reviews locally (the review tool lives outside this repo — not
+  published): hand it the review checklist below or run the local helper. It
+  requires Kimi quota; it 403s when exhausted — just retry later.
 - After a review, OpenCode triages findings: CRITICAL → fix + retest; MAJOR →
   fix or document; MINOR → address in a batch. Findings that are intentional
   or impossible (e.g., game-engine constraints) get a one-line note in the
