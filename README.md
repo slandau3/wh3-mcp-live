@@ -114,3 +114,27 @@ refresh immediately after each execution so the agent can verify effects.
   and it's wired into an **MCP server + remote agent loop**.
 
 MIT licensed (see LICENSE); upstream contributions remain under their own terms.
+
+## Battle context (experimental)
+
+Optional second pack (`wh3_mod_battle/`) adds the same exec bridge to the
+**battle** scripting context, so agents can execute Lua mid-battle via the
+`bm:` API (spawn units, buffs, probes).
+
+- Builds to a separate pack; enable/disable independently of the campaign mod.
+- Overrides `script/battle/default_battle/battle_start.lua` — thin mirror of
+  the vanilla setup + the bridge polled via `bm:callback`. This is the
+  patch-sensitive part; disable the pack if anything misbehaves.
+- Uses `exec_battle_script.lua` / `exec_battle_trigger.txt` /
+  `exec_battle_result.json` in the same exec folder. Agent side:
+
+```bash
+tools/wh3-exec -b 'bm:... your battle lua ...'
+```
+
+- Everything pcall-wrapped: errors return `{ok:false, error:...}` instead of
+  crashing the battle Lua interpreter.
+- Battle state is throwaway — mid-battle changes do not persist to campaign
+  or saves. Singleplayer only.
+
+Build: `python3 tools/make_pack.py wh3_mod_battle/script wh3_battle.pack`

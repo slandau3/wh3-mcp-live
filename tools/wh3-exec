@@ -25,6 +25,24 @@ TRIGGER="$LOCAL_DIR/trigger.txt"
 SCRIPT="$LOCAL_DIR/exec_script.lua"
 RESULT="$LOCAL_DIR/exec_result.json"
 
+# Battle mode (-b): execute in the battle context instead of the campaign
+if [ "$1" = "-b" ]; then
+  BATTLE=1
+  shift
+fi
+if [ "$BATTLE" = "1" ]; then
+  SCRIPT="$LOCAL_DIR/exec_battle_script.lua"
+  TRIGGER="$LOCAL_DIR/battle_trigger.txt"
+  RESULT="$LOCAL_DIR/battle_result.json"
+  SCRIPT_REMOTE='exec_battle_script.lua'
+  TRIGGER_REMOTE='exec_battle_trigger.txt'
+  RESULT_REMOTE='exec_battle_result.json'
+else
+  SCRIPT_REMOTE='exec_script.lua'
+  TRIGGER_REMOTE='exec_trigger.txt'
+  RESULT_REMOTE='exec_result.json'
+fi
+
 if [ "$1" = "-f" ]; then
   cp "$2" "$SCRIPT"
 else
@@ -39,13 +57,13 @@ printf '%s' "$NEXT" > "$TRIGGER"
 ssh_extra=()
 [ -n "$SSH_KEY" ] && ssh_extra=(-i "$SSH_KEY")
 
-echo "Pushing exec_script.lua ($(wc -c < "$SCRIPT") bytes, trigger $NEXT)..."
+echo "Pushing $SCRIPT_REMOTE ($(wc -c < "$SCRIPT") bytes, trigger $NEXT)..."
 scp "${ssh_extra[@]}" -o BatchMode=yes "$SCRIPT" "$TRIGGER" "$VM_SSH_ALIAS:$EXEC_DIR/" >/dev/null
 
 echo "Waiting for in-game execution (up to 45s)..."
 for i in $(seq 1 45); do
   sleep 1
-  if scp "${ssh_extra[@]}" -o BatchMode=yes "$VM_SSH_ALIAS:$EXEC_DIR/exec_result.json" "$RESULT" >/dev/null 2>&1; then
+  if scp "${ssh_extra[@]}" -o BatchMode=yes "$VM_SSH_ALIAS:$EXEC_DIR/$RESULT_REMOTE" "$RESULT" >/dev/null 2>&1; then
     if [ -s "$RESULT" ]; then
       echo "=== exec_result.json:"
       python3 -c "
