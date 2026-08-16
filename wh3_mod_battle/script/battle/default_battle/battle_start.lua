@@ -100,7 +100,7 @@ local function run_battle_exec()
 
     local script = io.open(EXEC_SCRIPT_PATH, "r")
     if not script then
-        write_file(EXEC_RESULT_PATH, '{"ok":false,"error":"exec_battle_script.lua not found","output":"","timestamp":' .. os.time() .. '}')
+        write_file(EXEC_RESULT_PATH, '{"ok":false,"error":"exec_battle_script.lua not found","output":"","request":' .. tostring(last_trigger_time) .. ',"timestamp":' .. os.time() .. '}')
         return
     end
     local chunk = script:read("*a")

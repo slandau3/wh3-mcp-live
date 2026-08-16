@@ -3,7 +3,7 @@ import json
 from mcp.server.fastmcp import FastMCP
 from db import load_tsv
 from config import WH3_DUMP_DIR
-from state import read_technology, read_factions
+from state import read_technology, read_factions, read_campaign_state
 
 _cache = None
 
@@ -319,6 +319,7 @@ def register(mcp: FastMCP):
             faction_key: Faction key (e.g. "wh3_main_cth_the_northern_provinces")
         """
         faction = None
+        local_faction = read_campaign_state().get("local_faction")
         for f in read_factions():
             if f.get("key") == faction_key:
                 faction = f
@@ -326,6 +327,9 @@ def register(mcp: FastMCP):
 
         if not faction:
             return json.dumps({"error": f"Faction '{faction_key}' not found"})
+
+        if local_faction and faction_key != local_faction:
+            return json.dumps({"error": f"Technology state is only dumped for the local faction ('{local_faction}'); requested '{faction_key}'"})
 
         tech_state = read_technology()
 

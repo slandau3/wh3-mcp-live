@@ -3,6 +3,7 @@ import json
 from mcp.server.fastmcp import FastMCP
 from db import load_tsv
 from config import WH3_DUMP_DIR
+from state import read_factions
 
 _cache = None
 
@@ -107,7 +108,14 @@ def register(mcp: FastMCP):
             faction_key: Faction key (e.g. "wh3_main_ksl_the_ice_court")
         """
         db = _load_edict_db()
-        subculture = FACTION_SUBCULTURE.get(faction_key, "")
+        # Prefer the live-dumped subculture; fall back to the static map
+        subculture = ""
+        for f in read_factions():
+            if f.get("key") == faction_key:
+                subculture = f.get("subculture", "") or ""
+                break
+        if not subculture:
+            subculture = FACTION_SUBCULTURE.get(faction_key, "")
 
         # Get edicts for this faction (by faction key or subculture)
         available_keys = set()

@@ -403,6 +403,9 @@ local function flush_events()
     for _, entry in ipairs(event_buffer) do
         table.insert(pending, { line = json.encode(entry), turn = entry.turn or 0 })
     end
+    for _, entry in ipairs(pending) do
+        table.insert(existing, entry)
+    end
 
     local turns = {}
     for _, e in ipairs(existing) do turns[e.turn] = true end

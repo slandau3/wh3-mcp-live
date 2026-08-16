@@ -63,6 +63,20 @@ local function exec_request(n, script_body, skip_write)
     return result
 end
 
+-- ---- Event logger section (flush_events regression test) ----
+local ev_start = src:find("local event_buffer = {}")
+local ev_init = src:find("-- TRIGGER WATCHER", ev_start, true)
+local ev_sep = ev_init and src:sub(1, ev_init):match(".*()%-%- ====\n%-%- TRIGGER WATCHER")
+local ev_stop = ev_sep or (ev_init and (ev_init - 1))
+if ev_start and ev_stop then
+    local ev_section = src:sub(ev_start, ev_stop)
+    ev_section = ev_section:gsub('local EVENTS_STATE_PATH = .-\n', 'local EVENTS_STATE_PATH = "' .. TMP .. '/events_state.json"\n', 1)
+    _G.json = json
+    local ev_chunk, ev_err = load(ev_section .. "\n_G.flush_events = flush_events\n_G.add_event = add_event\n", "events")
+    assert(ev_chunk, ev_err)
+    ev_chunk()
+end
+
 local failures = 0
 local function expect(cond, name, detail)
     if cond then
@@ -119,6 +133,19 @@ seed_exec_watermark()
 local seeded = io.open(TMP .. "/exec/exec_result.json", "r")
 expect(seeded == nil, "no execution from seeding", seeded)
 if seeded then seeded:close() end
+
+-- TEST 7b: event logger flush persists events (regression: pending was dropped)
+if flush_events then
+    os.remove(TMP .. "/events_state.json")
+    add_event("FactionTurnStart", nil)
+    add_event("CharacterCreated", nil)
+    flush_events()
+    local ef = io.open(TMP .. "/events_state.json", "r")
+    local content = ef and ef:read("*a") or ""
+    if ef then ef:close() end
+    expect(content:find("FactionTurnStart") ~= nil, "flush persists first event", content)
+    expect(content:find("CharacterCreated") ~= nil, "flush persists second event", content)
+end
 
 -- TEST 7: post-seed execution works (100 > seeded 99)
 result = exec_request(100, [[wh3_exec_out("after seed ok")]])
